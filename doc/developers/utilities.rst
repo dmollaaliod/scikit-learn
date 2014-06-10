@@ -181,36 +181,11 @@ Graph Routines
 Backports
 =========
 
-- :class:`fixes.Counter` (partial backport of ``collections.Counter`` from
-  Python 2.7) Used in ``sklearn.feature_extraction.text``.
+- :func:`fixes.expit`: Logistic sigmoid function. Replacement for SciPy 0.10's
+  ``scipy.special.expit``.
 
-- :func:`fixes.unique`: (backport of ``np.unique`` from numpy 1.4).  Find the
-  unique entries in an array.  In numpy versions < 1.4, ``np.unique`` is less
-  flexible.  Used in :mod:`sklearn.cross_validation`.
-
-- :func:`fixes.copysign`: (backport of ``np.copysign`` from numpy 1.4).
-  Change the sign of ``x1`` to that of ``x2``, element-wise.
-
-- :func:`fixes.in1d`: (backport of ``np.in1d`` from numpy 1.4).
-  Test whether each element of an array is in a second array.  Used in
-  ``sklearn.datasets.twenty_newsgroups`` and
-  ``sklearn.feature_extraction.image``.
-
-- :func:`fixes.savemat` (backport of ``scipy.io.savemat`` from scipy 0.7.2).
-  Save an array in MATLAB-format. In earlier versions, the keyword
-  ``oned_as`` is not available.
-
-- :func:`fixes.count_nonzero` (backport of ``np.count_nonzero`` from
-  numpy 1.6).  Count the nonzero elements of a matrix.  Used in
-  tests of :mod:`sklearn.linear_model`.
-
-- :func:`arrayfuncs.solve_triangular`
-  (Back-ported from scipy v0.9)  Used in ``sklearn.linear_model.omp``,
-  independent back-ports in ``sklearn.mixture.gmm`` and
-  :mod:`sklearn.gaussian_process`.
-
-- :func:`sparsetools.cs_graph_components`
-  (backported from ``scipy.sparse.cs_graph_components`` in scipy 0.9).
+- :func:`sparsetools.connected_components`
+  (backported from ``scipy.sparse.connected_components`` in scipy 0.12).
   Used in ``sklearn.cluster.hierarchical``, as well as in tests for
   :mod:`sklearn.feature_extraction`.
 
@@ -253,11 +228,23 @@ Testing Functions
 - :func:`testing.assert_raise_message`: Assertions for checking the
   error raise message.
 
-- :class:`mock_urllib2`: Object which mocks the urllib2 module to fake
-  requests of mldata.  Used in tests of :mod:`sklearn.datasets`.
+- :func:`testing.mock_mldata_urlopen`: Mocks the urlopen function to fake
+  requests to mldata.org. Used in tests of :mod:`sklearn.datasets`.
 
 - :func:`testing.all_estimators` : returns a list of all estimators in
   sklearn to test for consistent behavior and interfaces.
+
+Multiclass and multilabel utility function
+==========================================
+
+- :func:`multiclass.is_multilabel`: Helper function to check if the task
+  is a multi-label classification one.
+
+- :func:`multiclass.is_label_indicator_matrix`: Helper function to check if
+  a classification output is in label indicator matrix format.
+
+- :func:`multiclass.unique_labels`: Helper function to extract an ordered
+  array of unique labels from different formats of target.
 
 
 Helper Functions
@@ -266,10 +253,6 @@ Helper Functions
 - :class:`gen_even_slices`: generator to create ``n``-packs of slices going up
   to ``n``.  Used in ``sklearn.decomposition.dict_learning`` and
   ``sklearn.cluster.k_means``.
-
-- :class:`arraybuilder.ArrayBuilder`: Helper class to incrementally build
-  a 1-d numpy.ndarray.  Currently used in
-  ``sklearn.datasets._svmlight_format.pyx``.
 
 - :func:`safe_mask`: Helper function to convert a mask to the format expected
   by the numpy array or scipy sparse matrix on which to use it (sparse
@@ -290,11 +273,11 @@ Hash Functions
   random projections::
 
     >>> from sklearn.utils import murmurhash3_32
-    >>> murmurhash3_32("some feature", seed=0)
-    -384616559
+    >>> murmurhash3_32("some feature", seed=0) == -384616559
+    True
 
-    >>> murmurhash3_32("some feature", seed=0, positive=True)
-    3910350737L
+    >>> murmurhash3_32("some feature", seed=0, positive=True) == 3910350737
+    True
 
   The ``sklearn.utils.murmurhash`` module can also be "cimported" from
   other cython modules so as to benefit from the high performance of

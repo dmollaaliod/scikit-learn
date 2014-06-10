@@ -5,8 +5,13 @@ Recursive feature elimination
 
 A recursive feature elimination example showing the relevance of pixels in
 a digit classification task.
+
+.. note::
+
+    See also :ref:`example_plot_rfe_with_cross_validation.py`
+
 """
-print __doc__
+print(__doc__)
 
 from sklearn.svm import SVC
 from sklearn.datasets import load_digits
@@ -24,8 +29,8 @@ rfe.fit(X, y)
 ranking = rfe.ranking_.reshape(digits.images[0].shape)
 
 # Plot pixel ranking
-import pylab as pl
-pl.matshow(ranking)
-pl.colorbar()
-pl.title("Ranking of pixels with RFE")
-pl.show()
+import matplotlib.pyplot as plt
+plt.matshow(ranking)
+plt.colorbar()
+plt.title("Ranking of pixels with RFE")
+plt.show()

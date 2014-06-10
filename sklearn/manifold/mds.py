@@ -68,8 +68,7 @@ def _smacof_single(similarities, metric=True, n_components=2, init=None,
     if similarities.shape[0] != similarities.shape[1]:
         raise ValueError("similarities must be a square array (shape=%d)" %
                          n_samples)
-    res = 100 * np.finfo(np.float).resolution
-    if np.any((similarities - similarities.T) > res):
+    if not np.allclose(similarities, similarities.T):
         raise ValueError("similarities must be symmetric")
 
     sim_flat = ((1 - np.tri(n_samples)) * similarities).ravel()
@@ -118,13 +117,13 @@ def _smacof_single(similarities, metric=True, n_components=2, init=None,
         X = 1. / n_samples * np.dot(B, X)
 
         dis = np.sqrt((X ** 2).sum(axis=1)).sum()
-        if verbose == 2:
-            print 'it: %d, stress %s' % (it, stress)
+        if verbose >= 2:
+            print('it: %d, stress %s' % (it, stress))
         if old_stress is not None:
             if(old_stress - stress / dis) < eps:
                 if verbose:
-                    print 'breaking at iteration %d with stress %s' % (it,
-                                                                       stress)
+                    print('breaking at iteration %d with stress %s' % (it,
+                                                                       stress))
                 break
         old_stress = stress / dis
 
@@ -141,7 +140,7 @@ def smacof(similarities, metric=True, n_components=2, init=None, n_init=8,
     a objective function, the *stress*, using a majorization technique. The
     Stress Majorization, also known as the Guttman Transform, guarantees a
     monotone convergence of Stress, and is more powerful than traditional
-    technics such as gradient descent.
+    techniques such as gradient descent.
 
     The SMACOF algorithm for metric MDS can summarized by the following steps:
 
@@ -181,7 +180,7 @@ def smacof(similarities, metric=True, n_components=2, init=None, n_init=8,
         parallel.
 
         If -1 all CPUs are used. If 1 is given, no parallel computing code is
-        used at all, which is useful for debuging. For n_jobs below -1,
+        used at all, which is useful for debugging. For n_jobs below -1,
         (n_cpus + 1 + n_jobs) are used. Thus for n_jobs = -2, all CPUs but one
         are used.
 
@@ -291,7 +290,7 @@ class MDS(BaseEstimator):
         parallel.
 
         If -1 all CPUs are used. If 1 is given, no parallel computing code is
-        used at all, which is useful for debuging. For n_jobs below -1,
+        used at all, which is useful for debugging. For n_jobs below -1,
         (n_cpus + 1 + n_jobs) are used. Thus for n_jobs = -2, all CPUs but one
         are used.
 
@@ -376,13 +375,13 @@ class MDS(BaseEstimator):
         """
         if X.shape[0] == X.shape[1] and self.dissimilarity != "precomputed":
             warnings.warn("The MDS API has changed. ``fit`` now constructs an"
-                          "dissimilarity matrix from data. To use a custom "
+                          " dissimilarity matrix from data. To use a custom "
                           "dissimilarity matrix, set "
                           "``dissimilarity=precomputed``.")
 
-        if self.dissimilarity is "precomputed":
+        if self.dissimilarity == "precomputed":
             self.dissimilarity_matrix_ = X
-        elif self.dissimilarity is "euclidean":
+        elif self.dissimilarity == "euclidean":
             self.dissimilarity_matrix_ = euclidean_distances(X)
         else:
             raise ValueError("Proximity must be 'precomputed' or 'euclidean'."

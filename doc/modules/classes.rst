@@ -7,8 +7,39 @@ the :ref:`full user guide <user_guide>` for further details, as the class and
 function raw specifications may not be enough to give full guidelines on their
 uses.
 
-.. contents:: List of modules
-   :local:
+
+.. _base_ref:
+
+:mod:`sklearn.base`: Base classes and utility functions
+=======================================================
+
+.. automodule:: sklearn.base
+    :no-members:
+    :no-inherited-members:
+
+Base classes
+------------
+.. currentmodule:: sklearn
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   base.BaseEstimator
+   base.ClassifierMixin
+   base.ClusterMixin
+   base.RegressorMixin
+   base.TransformerMixin
+
+Functions
+---------
+.. currentmodule:: sklearn
+
+.. autosummary::
+   :toctree: generated/
+   :template: function.rst
+
+   base.clone
 
 
 .. _cluster_ref:
@@ -31,7 +62,9 @@ Classes
    :template: class.rst
 
    cluster.AffinityPropagation
+   cluster.AgglomerativeClustering
    cluster.DBSCAN
+   cluster.FeatureAgglomeration
    cluster.KMeans
    cluster.MiniBatchKMeans
    cluster.MeanShift
@@ -51,6 +84,28 @@ Functions
    cluster.dbscan
    cluster.mean_shift
    cluster.spectral_clustering
+
+.. _bicluster_ref:
+
+:mod:`sklearn.cluster.bicluster`: Biclustering
+==============================================
+
+.. automodule:: sklearn.cluster.bicluster
+   :no-members:
+   :no-inherited-members:
+
+**User guide:** See the :ref:`biclustering` section for further details.
+
+Classes
+-------
+.. currentmodule:: sklearn.cluster.bicluster
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   SpectralBiclustering
+   SpectralCoclustering
 
 .. _covariance_ref:
 
@@ -160,6 +215,8 @@ Loaders
    datasets.fetch_mldata
    datasets.fetch_olivetti_faces
    datasets.fetch_california_housing
+   datasets.fetch_covtype
+   datasets.load_mlcomp
    datasets.load_sample_image
    datasets.load_sample_images
    datasets.load_svmlight_file
@@ -180,6 +237,7 @@ Samples generator
    datasets.make_friedman1
    datasets.make_friedman2
    datasets.make_friedman3
+   datasets.make_gaussian_quantiles
    datasets.make_hastie_10_2
    datasets.make_low_rank_matrix
    datasets.make_moons
@@ -191,6 +249,8 @@ Samples generator
    datasets.make_sparse_uncorrelated
    datasets.make_spd_matrix
    datasets.make_swiss_roll
+   datasets.make_biclusters
+   datasets.make_checkerboard
 
 
 .. _decomposition_ref:
@@ -211,12 +271,12 @@ Samples generator
    :template: class.rst
 
    decomposition.PCA
-   decomposition.ProbabilisticPCA
    decomposition.ProjectedGradientNMF
    decomposition.RandomizedPCA
    decomposition.KernelPCA
    decomposition.FactorAnalysis
    decomposition.FastICA
+   decomposition.TruncatedSVD
    decomposition.NMF
    decomposition.SparsePCA
    decomposition.MiniBatchSparsePCA
@@ -274,13 +334,17 @@ Samples generator
    :toctree: generated/
    :template: class.rst
 
-   ensemble.RandomForestClassifier
-   ensemble.RandomTreesEmbedding
-   ensemble.RandomForestRegressor
+   ensemble.AdaBoostClassifier
+   ensemble.AdaBoostRegressor
+   ensemble.BaggingClassifier
+   ensemble.BaggingRegressor
    ensemble.ExtraTreesClassifier
    ensemble.ExtraTreesRegressor
    ensemble.GradientBoostingClassifier
    ensemble.GradientBoostingRegressor
+   ensemble.RandomForestClassifier
+   ensemble.RandomTreesEmbedding
+   ensemble.RandomForestRegressor
 
 .. autosummary::
    :toctree: generated/
@@ -384,6 +448,7 @@ From text
    :toctree: generated/
    :template: class.rst
 
+   feature_selection.GenericUnivariateSelect
    feature_selection.SelectPercentile
    feature_selection.SelectKBest
    feature_selection.SelectFpr
@@ -453,7 +518,9 @@ From text
    :template: class.rst
 
    grid_search.GridSearchCV
-   grid_search.IterGrid
+   grid_search.ParameterGrid
+   grid_search.ParameterSampler
+   grid_search.RandomizedSearchCV
 
 
 .. _hmm_ref:
@@ -501,6 +568,7 @@ From text
    :template: function.rst
 
    isotonic.isotonic_regression
+   isotonic.check_increasing
 
 .. _kernel_approximation_ref:
 
@@ -524,24 +592,6 @@ From text
    kernel_approximation.RBFSampler
    kernel_approximation.SkewedChi2Sampler
 
-:mod:`sklearn.semi_supervised` Semi-Supervised Learning
-========================================================
-
-.. automodule:: sklearn.semi_supervised
-   :no-members:
-   :no-inherited-members:
-
-**User guide:** See the :ref:`semi_supervised` section for further details.
-
-.. currentmodule:: sklearn
-
-.. autosummary::
-   :toctree: generated/
-   :template: class.rst
-
-   semi_supervised.LabelPropagation
-   semi_supervised.LabelSpreading
-
 .. _lda_ref:
 
 :mod:`sklearn.lda`: Linear Discriminant Analysis
@@ -561,6 +611,24 @@ From text
 
    lda.LDA
 
+
+.. _learning_curve_ref:
+
+:mod:`sklearn.learning_curve` Learning curve evaluation
+=======================================================
+
+.. automodule:: sklearn.learning_curve
+   :no-members:
+   :no-inherited-members:
+
+.. currentmodule:: sklearn
+
+.. autosummary::
+   :toctree: generated/
+   :template: function.rst
+
+   learning_curve.learning_curve
+   learning_curve.validation_curve
 
 .. _linear_model_ref:
 
@@ -594,7 +662,10 @@ From text
    linear_model.LogisticRegression
    linear_model.MultiTaskLasso
    linear_model.MultiTaskElasticNet
+   linear_model.MultiTaskLassoCV
+   linear_model.MultiTaskElasticNetCV
    linear_model.OrthogonalMatchingPursuit
+   linear_model.OrthogonalMatchingPursuitCV
    linear_model.PassiveAggressiveClassifier
    linear_model.PassiveAggressiveRegressor
    linear_model.Perceptron
@@ -639,6 +710,7 @@ From text
     manifold.Isomap
     manifold.MDS
     manifold.SpectralEmbedding
+    manifold.TSNE
 
 .. autosummary::
     :toctree: generated
@@ -662,8 +734,22 @@ user guide for further details.
 
 .. currentmodule:: sklearn
 
+Model Selection Interface
+-------------------------
+See the :ref:`scoring_parameter` section of the user guide for further
+details.
+
+.. autosummary::
+   :toctree: generated/
+   :template: function.rst
+
+   metrics.make_scorer
+
 Classification metrics
 ----------------------
+
+See the :ref:`classification_metrics` section of the user guide for further
+details.
 
 .. autosummary::
    :toctree: generated/
@@ -671,18 +757,21 @@ Classification metrics
 
    metrics.accuracy_score
    metrics.auc
-   metrics.auc_score
    metrics.average_precision_score
    metrics.classification_report
    metrics.confusion_matrix
    metrics.f1_score
    metrics.fbeta_score
+   metrics.hamming_loss
    metrics.hinge_loss
+   metrics.jaccard_similarity_score
+   metrics.log_loss
    metrics.matthews_corrcoef
    metrics.precision_recall_curve
    metrics.precision_recall_fscore_support
    metrics.precision_score
    metrics.recall_score
+   metrics.roc_auc_score
    metrics.roc_curve
    metrics.zero_one_loss
 
@@ -728,6 +817,21 @@ details.
    metrics.silhouette_score
    metrics.silhouette_samples
    metrics.v_measure_score
+
+Biclustering metrics
+--------------------
+
+See the :ref:`biclustering_evaluation` section of the user guide for
+further details.
+
+.. currentmodule:: sklearn
+
+.. autosummary::
+   :toctree: generated/
+   :template: function.rst
+
+   metrics.consensus_score
+
 
 Pairwise metrics
 ----------------
@@ -809,7 +913,6 @@ Pairwise metrics
     multiclass.fit_ecoc
     multiclass.predict_ecoc
 
-
 .. _naive_bayes_ref:
 
 :mod:`sklearn.naive_bayes`: Naive Bayes
@@ -854,8 +957,11 @@ Pairwise metrics
    neighbors.RadiusNeighborsClassifier
    neighbors.KNeighborsRegressor
    neighbors.RadiusNeighborsRegressor
-   neighbors.BallTree
    neighbors.NearestCentroid
+   neighbors.BallTree
+   neighbors.KDTree
+   neighbors.DistanceMetric
+   neighbors.KernelDensity
 
 .. autosummary::
    :toctree: generated/
@@ -864,17 +970,16 @@ Pairwise metrics
    neighbors.kneighbors_graph
    neighbors.radius_neighbors_graph
 
+.. _neural_network_ref:
 
-.. _pls_ref:
+:mod:`sklearn.neural_network`: Neural network models
+=====================================================
 
-:mod:`sklearn.pls`: Partial Least Squares
-=========================================
-
-.. automodule:: sklearn.pls
+.. automodule:: sklearn.neural_network
    :no-members:
    :no-inherited-members:
 
-**User guide:** See the :ref:`pls` section for further details.
+**User guide:** See the :ref:`neural_network` section for further details.
 
 .. currentmodule:: sklearn
 
@@ -882,10 +987,30 @@ Pairwise metrics
    :toctree: generated/
    :template: class.rst
 
-   pls.PLSRegression
-   pls.PLSCanonical
-   pls.CCA
-   pls.PLSSVD
+   neural_network.BernoulliRBM
+
+
+.. _cross_decomposition_ref:
+
+:mod:`sklearn.cross_decomposition`: Cross decomposition
+=======================================================
+
+.. automodule:: sklearn.cross_decomposition
+   :no-members:
+   :no-inherited-members:
+
+**User guide:** See the :ref:`cross_decomposition` section for further details.
+
+.. currentmodule:: sklearn
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   cross_decomposition.PLSRegression
+   cross_decomposition.PLSCanonical
+   cross_decomposition.CCA
+   cross_decomposition.PLSSVD
 
 
 .. _pipeline_ref:
@@ -906,6 +1031,13 @@ Pairwise metrics
    pipeline.Pipeline
    pipeline.FeatureUnion
 
+.. autosummary::
+   :toctree: generated/
+   :template: function.rst
+
+   pipeline.make_pipeline
+   pipeline.make_union
+
 
 .. _preprocessing_ref:
 
@@ -925,13 +1057,16 @@ Pairwise metrics
    :template: class.rst
 
    preprocessing.Binarizer
+   preprocessing.Imputer
    preprocessing.KernelCenterer
    preprocessing.LabelBinarizer
    preprocessing.LabelEncoder
+   preprocessing.MultiLabelBinarizer
    preprocessing.MinMaxScaler
    preprocessing.Normalizer
    preprocessing.OneHotEncoder
    preprocessing.StandardScaler
+   preprocessing.PolynomialFeatures
 
 .. autosummary::
    :toctree: generated/
@@ -939,6 +1074,7 @@ Pairwise metrics
 
    preprocessing.add_dummy_feature
    preprocessing.binarize
+   preprocessing.label_binarize
    preprocessing.normalize
    preprocessing.scale
 
@@ -985,6 +1121,27 @@ Pairwise metrics
    :template: function.rst
 
    random_projection.johnson_lindenstrauss_min_dim
+
+
+.. _semi_supervised_ref:
+
+:mod:`sklearn.semi_supervised` Semi-Supervised Learning
+========================================================
+
+.. automodule:: sklearn.semi_supervised
+   :no-members:
+   :no-inherited-members:
+
+**User guide:** See the :ref:`semi_supervised` section for further details.
+
+.. currentmodule:: sklearn
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   semi_supervised.LabelPropagation
+   semi_supervised.LabelSpreading
 
 
 .. _svm_ref:

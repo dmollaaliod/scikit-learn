@@ -2,33 +2,34 @@
 # -*- coding: utf-8 -*-
 
 """
-======================
-Classifiers Comparison
-======================
+=====================
+Classifier comparison
+=====================
+
 A comparison of a several classifiers in scikit-learn on synthetic datasets.
 The point of this example is to illustrate the nature of decision boundaries
 of different classifiers.
 This should be taken with a grain of salt, as the intuition conveyed by
 these examples does not necessarily carry over to real datasets.
 
-In particular in high dimensional spaces data can more easily be separated
+Particularly in high-dimensional spaces, data can more easily be separated
 linearly and the simplicity of classifiers such as naive Bayes and linear SVMs
-might lead to better generalization.
+might lead to better generalization than is achieved by other classifiers.
 
 The plots show training points in solid colors and testing points
 semi-transparent. The lower right shows the classification accuracy on the test
 set.
 """
-print __doc__
+print(__doc__)
 
 
-# Code source: Gael Varoqueux
-#              Andreas Mueller
-# Modified for Documentation merge by Jaques Grobler
-# License: BSD
+# Code source: Gaël Varoquaux
+#              Andreas Müller
+# Modified for documentation by Jaques Grobler
+# License: BSD 3 clause
 
 import numpy as np
-import pylab as pl
+import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -36,7 +37,7 @@ from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.lda import LDA
 from sklearn.qda import QDA
@@ -44,13 +45,14 @@ from sklearn.qda import QDA
 h = .02  # step size in the mesh
 
 names = ["Nearest Neighbors", "Linear SVM", "RBF SVM", "Decision Tree",
-         "Random Forest", "Naive Bayes", "LDA", "QDA"]
+         "Random Forest", "AdaBoost", "Naive Bayes", "LDA", "QDA"]
 classifiers = [
     KNeighborsClassifier(3),
     SVC(kernel="linear", C=0.025),
     SVC(gamma=2, C=1),
     DecisionTreeClassifier(max_depth=5),
     RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
+    AdaBoostClassifier(),
     GaussianNB(),
     LDA(),
     QDA()]
@@ -66,7 +68,7 @@ datasets = [make_moons(noise=0.3, random_state=0),
             linearly_separable
             ]
 
-figure = pl.figure(figsize=(24, 8))
+figure = plt.figure(figsize=(27, 9))
 i = 1
 # iterate over datasets
 for ds in datasets:
@@ -81,9 +83,9 @@ for ds in datasets:
                          np.arange(y_min, y_max, h))
 
     # just plot the dataset first
-    cm = pl.cm.RdBu
+    cm = plt.cm.RdBu
     cm_bright = ListedColormap(['#FF0000', '#0000FF'])
-    ax = pl.subplot(len(datasets), len(classifiers) + 1, i)
+    ax = plt.subplot(len(datasets), len(classifiers) + 1, i)
     # Plot the training points
     ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright)
     # and testing points
@@ -96,11 +98,11 @@ for ds in datasets:
 
     # iterate over classifiers
     for name, clf in zip(names, classifiers):
-        ax = pl.subplot(len(datasets), len(classifiers) + 1, i)
+        ax = plt.subplot(len(datasets), len(classifiers) + 1, i)
         clf.fit(X_train, y_train)
         score = clf.score(X_test, y_test)
 
-        # Plot the decision boundary. For that, we will asign a color to each
+        # Plot the decision boundary. For that, we will assign a color to each
         # point in the mesh [x_min, m_max]x[y_min, y_max].
         if hasattr(clf, "decision_function"):
             Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
@@ -127,4 +129,4 @@ for ds in datasets:
         i += 1
 
 figure.subplots_adjust(left=.02, right=.98)
-pl.show()
+plt.show()

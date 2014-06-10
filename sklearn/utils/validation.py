@@ -1,21 +1,45 @@
 """Utilities for input validation"""
-# Authors: Olivier Grisel and Gael Varoquaux and others (please update me)
-# License: BSD 3
+# Authors: Olivier Grisel
+#          Gael Varoquaux
+#          Andreas Mueller
+#          Lars Buitinck
+#          Alexandre Gramfort
+#          Nicolas Tresegnie
+# License: BSD 3 clause
 
 import warnings
 import numbers
 
 import numpy as np
-from scipy import sparse
+import scipy.sparse as sp
 
+from ..externals import six
 from .fixes import safe_copy
+
+
+class DataConversionWarning(UserWarning):
+    "A warning on implicit data conversions happening in the code"
+    pass
+
+warnings.simplefilter("always", DataConversionWarning)
+
+
+class NonBLASDotWarning(UserWarning):
+    "A warning on implicit dispatch to numpy.dot"
+    pass
+
+
+# Silenced by default to reduce verbosity. Turn on at runtime for
+# performance profiling.
+warnings.simplefilter('ignore', NonBLASDotWarning)
 
 
 def _assert_all_finite(X):
     """Like assert_all_finite, but only for ndarray."""
     if (X.dtype.char in np.typecodes['AllFloat'] and not np.isfinite(X.sum())
             and not np.isfinite(X).all()):
-        raise ValueError("Array contains NaN or infinity.")
+        raise ValueError("Input contains NaN, infinity"
+                         " or a value too large for %r." % X.dtype)
 
 
 def assert_all_finite(X):
@@ -26,22 +50,36 @@ def assert_all_finite(X):
     # First try an O(n) time, O(1) space solution for the common case that
     # there everything is finite; fall back to O(n) space np.isfinite to
     # prevent false positives from overflow in sum method.
-    _assert_all_finite(X.data if sparse.issparse(X) else X)
+    _assert_all_finite(X.data if sp.issparse(X) else X)
 
 
-def safe_asarray(X, dtype=None, order=None):
-    """Convert X to an array or sparse matrix.
+def safe_asarray(X, dtype=None, order=None, copy=False, force_all_finite=True):
+    """Convert X to an array or CSC/CSR/COO sparse matrix.
 
-    Prevents copying X when possible; sparse matrices are passed through."""
-    if sparse.issparse(X):
-        assert_all_finite(X.data)
+    Prevents copying X when possible. Sparse matrices in CSR, CSC and COO
+    formats are passed through. Other sparse formats are converted to CSR
+    (somewhat arbitrarily).
+
+    If a specific compressed sparse format is required, use atleast2d_or_cs{c,r}
+    instead.
+    """
+    if sp.issparse(X):
+        if not isinstance(X, (sp.coo_matrix, sp.csc_matrix, sp.csr_matrix)):
+            X = X.tocsr()
+        elif copy:
+            X = X.copy()
+        if force_all_finite:
+            _assert_all_finite(X.data)
+        # enforces dtype on data array (order should be kept the same).
+        X.data = np.asarray(X.data, dtype=dtype)
     else:
-        X = np.asarray(X, dtype, order)
-        assert_all_finite(X)
+        X = np.array(X, dtype=dtype, order=order, copy=copy)
+        if force_all_finite:
+            _assert_all_finite(X)
     return X
 
 
-def as_float_array(X, copy=True):
+def as_float_array(X, copy=True, force_all_finite=True):
     """Converts an array-like to an array of floats
 
     The new dtype will be np.float32 or np.float64, depending on the original
@@ -62,9 +100,10 @@ def as_float_array(X, copy=True):
         An array of type np.float
     """
     if isinstance(X, np.matrix) or (not isinstance(X, np.ndarray)
-                                    and not sparse.issparse(X)):
-        return safe_asarray(X, dtype=np.float64)
-    elif sparse.issparse(X) and X.dtype in [np.float32, np.float64]:
+                                    and not sp.issparse(X)):
+        return safe_asarray(X, dtype=np.float64, copy=copy,
+                            force_all_finite=force_all_finite)
+    elif sp.issparse(X) and X.dtype in [np.float32, np.float64]:
         return X.copy() if copy else X
     elif X.dtype in [np.float32, np.float64]:  # is numpy array
         return X.copy('F' if X.flags['F_CONTIGUOUS'] else 'C') if copy else X
@@ -72,48 +111,57 @@ def as_float_array(X, copy=True):
         return X.astype(np.float32 if X.dtype == np.int32 else np.float64)
 
 
-def array2d(X, dtype=None, order=None, copy=False):
+def array2d(X, dtype=None, order=None, copy=False, force_all_finite=True):
     """Returns at least 2-d array with data from X"""
-    if sparse.issparse(X):
+    if sp.issparse(X):
         raise TypeError('A sparse matrix was passed, but dense data '
                         'is required. Use X.toarray() to convert to dense.')
     X_2d = np.asarray(np.atleast_2d(X), dtype=dtype, order=order)
-    _assert_all_finite(X_2d)
+    if force_all_finite:
+        _assert_all_finite(X_2d)
     if X is X_2d and copy:
         X_2d = safe_copy(X_2d)
     return X_2d
 
 
-def _atleast2d_or_sparse(X, dtype, order, copy, sparse_class, convmethod):
-    if sparse.issparse(X):
-        # Note: order is ignored because CSR matrices hold data in 1-d arrays
-        if dtype is None or X.dtype == dtype:
+def _atleast2d_or_sparse(X, dtype, order, copy, sparse_class, convmethod,
+                         check_same_type, force_all_finite):
+    if sp.issparse(X):
+        if check_same_type(X) and X.dtype == dtype:
+            X = getattr(X, convmethod)(copy=copy)
+        elif dtype is None or X.dtype == dtype:
             X = getattr(X, convmethod)()
         else:
             X = sparse_class(X, dtype=dtype)
-        _assert_all_finite(X.data)
+        if force_all_finite:
+            _assert_all_finite(X.data)
+        X.data = np.array(X.data, copy=False, order=order)
     else:
-        X = array2d(X, dtype=dtype, order=order, copy=copy)
-        _assert_all_finite(X)
+        X = array2d(X, dtype=dtype, order=order, copy=copy,
+                    force_all_finite=force_all_finite)
     return X
 
 
-def atleast2d_or_csc(X, dtype=None, order=None, copy=False):
+def atleast2d_or_csc(X, dtype=None, order=None, copy=False,
+                     force_all_finite=True):
     """Like numpy.atleast_2d, but converts sparse matrices to CSC format.
 
     Also, converts np.matrix to np.ndarray.
     """
-    return _atleast2d_or_sparse(X, dtype, order, copy, sparse.csc_matrix,
-                                "tocsc")
+    return _atleast2d_or_sparse(X, dtype, order, copy, sp.csc_matrix,
+                                "tocsc", sp.isspmatrix_csc,
+                                force_all_finite)
 
 
-def atleast2d_or_csr(X, dtype=None, order=None, copy=False):
+def atleast2d_or_csr(X, dtype=None, order=None, copy=False,
+                     force_all_finite=True):
     """Like numpy.atleast_2d, but converts sparse matrices to CSR format
 
     Also, converts np.matrix to np.ndarray.
     """
-    return _atleast2d_or_sparse(X, dtype, order, copy, sparse.csr_matrix,
-                                "tocsr")
+    return _atleast2d_or_sparse(X, dtype, order, copy, sp.csr_matrix,
+                                "tocsr", sp.isspmatrix_csr,
+                                force_all_finite)
 
 
 def _num_samples(x):
@@ -163,6 +211,9 @@ def check_arrays(*arrays, **options):
     allow_lists : bool
         Allow lists of arbitrary objects as input, just check their length.
         Disables
+
+    allow_nans : boolean, False by default
+        Allows nans in the arrays
     """
     sparse_format = options.pop('sparse_format', None)
     if sparse_format not in (None, 'csr', 'csc', 'dense'):
@@ -171,6 +222,8 @@ def check_arrays(*arrays, **options):
     check_ccontiguous = options.pop('check_ccontiguous', False)
     dtype = options.pop('dtype', None)
     allow_lists = options.pop('allow_lists', False)
+    allow_nans = options.pop('allow_nans', False)
+
     if options:
         raise TypeError("Unexpected keyword arguments: %r" % options.keys())
 
@@ -193,7 +246,7 @@ def check_arrays(*arrays, **options):
                              % (size, n_samples))
 
         if not allow_lists or hasattr(array, "shape"):
-            if sparse.issparse(array):
+            if sp.issparse(array):
                 if sparse_format == 'csr':
                     array = array.tocsr()
                 elif sparse_format == 'csc':
@@ -206,13 +259,19 @@ def check_arrays(*arrays, **options):
                     array.data = np.ascontiguousarray(array.data, dtype=dtype)
                 else:
                     array.data = np.asarray(array.data, dtype=dtype)
-                _assert_all_finite(array.data)
+                if not allow_nans:
+                    _assert_all_finite(array.data)
             else:
                 if check_ccontiguous:
                     array = np.ascontiguousarray(array, dtype=dtype)
                 else:
                     array = np.asarray(array, dtype=dtype)
-                _assert_all_finite(array)
+                if not allow_nans:
+                    _assert_all_finite(array)
+
+            if array.ndim >= 3:
+                raise ValueError("Found array with dim %d. Expected <= 2" %
+                                 array.ndim)
 
         if copy and array is array_orig:
             array = array.copy()
@@ -221,13 +280,45 @@ def check_arrays(*arrays, **options):
     return checked_arrays
 
 
+def column_or_1d(y, warn=False):
+    """ Ravel column or 1d numpy array, else raises an error
+
+    Parameters
+    ----------
+    y : array-like
+
+    Returns
+    -------
+    y : array
+
+    """
+    shape = np.shape(y)
+    if len(shape) == 1:
+        return np.ravel(y)
+    if len(shape) == 2 and shape[1] == 1:
+        if warn:
+            warnings.warn("A column-vector y was passed when a 1d array was"
+                          " expected. Please change the shape of y to "
+                          "(n_samples, ), for example using ravel().",
+                          DataConversionWarning, stacklevel=2)
+        return np.ravel(y)
+
+    raise ValueError("bad input shape {0}".format(shape))
+
+
 def warn_if_not_float(X, estimator='This algorithm'):
-    """Warning utility function to check that data type is floating point"""
-    if not isinstance(estimator, basestring):
+    """Warning utility function to check that data type is floating point.
+
+    Returns True if a warning was raised (i.e. the input is not float) and
+    False otherwise, for easier input validation.
+    """
+    if not isinstance(estimator, six.string_types):
         estimator = estimator.__class__.__name__
     if X.dtype.kind != 'f':
         warnings.warn("%s assumes floating point values as input, "
                       "got %s" % (estimator, X.dtype))
+        return True
+    return False
 
 
 def check_random_state(seed):
@@ -240,7 +331,7 @@ def check_random_state(seed):
     """
     if seed is None or seed is np.random:
         return np.random.mtrand._rand
-    if isinstance(seed, numbers.Integral):
+    if isinstance(seed, (numbers.Integral, np.integer)):
         return np.random.RandomState(seed)
     if isinstance(seed, np.random.RandomState):
         return seed

@@ -1024,7 +1024,7 @@ static void solve_l2r_l1l2_svr(
 	double d, G, H;
 	double Gmax_old = INF;
 	double Gmax_new, Gnorm1_new;
-	double Gnorm1_init;
+	double Gnorm1_init = 0.;
 	double *beta = new double[l];
 	double *QD = new double[l];
 	double *y = prob->y;
@@ -1423,7 +1423,7 @@ static void solve_l1r_l2_svc(
 	double d, G_loss, G, H;
 	double Gmax_old = INF;
 	double Gmax_new, Gnorm1_new;
-	double Gnorm1_init;
+	double Gnorm1_init = 0.;
 	double d_old, d_diff;
 	double loss_old, loss_new;
 	double appxcond, cond;
@@ -1713,7 +1713,7 @@ static void solve_l1r_lr(
 	double sigma = 0.01;
 	double w_norm, w_norm_new;
 	double z, G, H;
-	double Gnorm1_init;
+	double Gnorm1_init = 0.;
 	double Gmax_old = INF;
 	double Gmax_new, Gnorm1_new;
 	double QP_Gmax_old = INF;
@@ -2237,7 +2237,7 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 			tron_obj.set_print_string(liblinear_print_string);
 			tron_obj.tron(w);
 			delete fun_obj;
-			delete C;
+			delete [] C;
 			break;
 		}
 		case L2R_L2LOSS_SVC:
@@ -2255,7 +2255,7 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 			tron_obj.set_print_string(liblinear_print_string);
 			tron_obj.tron(w);
 			delete fun_obj;
-			delete C;
+			delete [] C;
 			break;
 		}
 		case L2R_L2LOSS_SVC_DUAL:
@@ -2300,7 +2300,7 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 			tron_obj.set_print_string(liblinear_print_string);
 			tron_obj.tron(w);
 			delete fun_obj;
-			delete C;
+			delete [] C;
 			break;
 
 		}

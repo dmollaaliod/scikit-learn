@@ -77,8 +77,14 @@ Loading an example dataset
 `iris <http://en.wikipedia.org/wiki/Iris_flower_data_set>`_ and `digits
 <http://archive.ics.uci.edu/ml/datasets/Pen-Based+Recognition+of+Handwritten+Digits>`_
 datasets for classification and the `boston house prices dataset
-<http://archive.ics.uci.edu/ml/datasets/Housing>`_ for regression.::
+<http://archive.ics.uci.edu/ml/datasets/Housing>`_ for regression.
 
+In the following, we start a Python interpreter from our shell and then
+load the `iris` and `digits` datasets.  Our notational convention is that
+``$`` denotes the shell prompt while ``>>>`` denotes the Python
+interpreter prompt::
+
+  $ python
   >>> from sklearn import datasets
   >>> iris = datasets.load_iris()
   >>> digits = datasets.load_digits()
@@ -86,14 +92,14 @@ datasets for classification and the `boston house prices dataset
 A dataset is a dictionary-like object that holds all the data and some
 metadata about the data. This data is stored in the ``.data`` member,
 which is a ``n_samples, n_features`` array. In the case of supervised
-problem, explanatory variables are stored in the ``.target`` member. More
+problem, one or more response variables are stored in the ``.target`` member. More
 details on the different datasets can be found in the :ref:`dedicated
 section <datasets>`.
 
 For instance, in the case of the digits dataset, ``digits.data`` gives
 access to the features that can be used to classify the digits samples::
 
-  >>> print digits.data  # doctest: +NORMALIZE_WHITESPACE
+  >>> print(digits.data)  # doctest: +NORMALIZE_WHITESPACE
   [[  0.   0.   5. ...,   0.   0.   0.]
    [  0.   0.   0. ...,  10.   0.   0.]
    [  0.   0.   0. ...,  16.   9.   0.]
@@ -165,12 +171,14 @@ We call our estimator instance `clf` as it is a classifier. It now must
 be fitted to the model, that is, it must `learn` from the model. This is
 done by passing our training set to the ``fit`` method. As a training
 set, let us use all the images of our dataset apart from the last
-one::
+one. We select this training set with the ``[:-1]`` Python syntax,
+which produces a new array that contains all but
+the last entry of ``digits.data``::
 
   >>> clf.fit(digits.data[:-1], digits.target[:-1])  # doctest: +NORMALIZE_WHITESPACE
   SVC(C=100.0, cache_size=200, class_weight=None, coef0=0.0, degree=3,
-    gamma=0.001, kernel='rbf', max_iter=-1, probability=False, shrinking=True,
-    tol=0.001, verbose=False)
+    gamma=0.001, kernel='rbf', max_iter=-1, probability=False,
+    random_state=None, shrinking=True, tol=0.001, verbose=False)
 
 Now you can predict new values, in particular, we can ask to the
 classifier what is the digit of our last image in the `digits` dataset,
@@ -207,8 +215,8 @@ persistence model, namely `pickle <http://docs.python.org/library/pickle.html>`_
   >>> X, y = iris.data, iris.target
   >>> clf.fit(X, y)  # doctest: +NORMALIZE_WHITESPACE
   SVC(C=1.0, cache_size=200, class_weight=None, coef0=0.0, degree=3, gamma=0.0,
-    kernel='rbf', max_iter=-1, probability=False, shrinking=True, tol=0.001,
-    verbose=False)
+    kernel='rbf', max_iter=-1, probability=False, random_state=None,
+    shrinking=True, tol=0.001, verbose=False)
 
   >>> import pickle
   >>> s = pickle.dumps(clf)

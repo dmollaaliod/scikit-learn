@@ -40,9 +40,9 @@ algorithms. The simplest clustering algorithm is
     >>> k_means = cluster.KMeans(n_clusters=3)
     >>> k_means.fit(X_iris) # doctest: +ELLIPSIS
     KMeans(copy_x=True, init='k-means++', ...
-    >>> print k_means.labels_[::10]
+    >>> print(k_means.labels_[::10])
     [1 1 1 1 1 0 0 0 0 0 2 2 2 2 2]
-    >>> print y_iris[::10]
+    >>> print(y_iris[::10])
     [0 0 0 0 0 1 1 1 1 1 2 2 2 2 2]
 
 .. |k_means_iris_bad_init| image:: ../../auto_examples/cluster/images/plot_cluster_iris_3.png
@@ -151,26 +151,27 @@ algorithms. The simplest clustering algorithm is
 Hierarchical agglomerative clustering: Ward
 ---------------------------------------------
 
-A :ref:`hierarchical_clustering` method is a type of cluster analysis 
+A :ref:`hierarchical_clustering` method is a type of cluster analysis
 that aims to build a hierarchy of clusters. In general, the various approaches
 of this technique are either:
 
-  * **Agglomerative** - `bottom-up` approaches, or
-  * **Divisive** - `top-down` approaches.
+  * **Agglomerative** - `bottom-up` approaches: each observation starts in its
+    own cluster, and clusters are iterativelly merged in such a way to
+    minimize a *linkage* criterion. This approach is particularly interesting
+    when the clusters of interest are made of only a few observations. When
+    the number of clusters is large, it is much more computationally efficient
+    than k-means.
 
-For estimating a large number of clusters, top-down approaches are both
-statistically ill-posed and slow due to it starting with all observations
-as one cluster, which it splits recursively. Agglomerative 
-hierarchical-clustering is a bottom-up approach that successively merges 
-observations together and is particularly useful when the clusters of interest 
-are made of only a few observations. *Ward* clustering minimizes a criterion 
-similar to k-means in a bottom-up approach. When the number of clusters is large, 
-it is much more computationally efficient than k-means.
+  * **Divisive** - `top-down` approaches: all observations start in one
+    cluster, which is iteratively split as one moves down the hierarchy.
+    For estimating large numbers of clusters, this approach is both slow (due
+    to all observations starting as one cluster, which it splits recursively)
+    and statistically ill-posed.
 
 Connectivity-constrained clustering
 .....................................
 
-With Ward clustering, it is possible to specify which samples can be
+With agglomerative clustering, it is possible to specify which samples can be
 clustered together by giving a connectivity graph. Graphs in the scikit
 are represented by their adjacency matrix. Often, a sparse matrix is used.
 This can be useful, for instance, to retrieve connected regions (sometimes
@@ -183,7 +184,7 @@ clustering an image:
     :align: right
 
 .. literalinclude:: ../../auto_examples/cluster/plot_lena_ward_segmentation.py
-    :lines: 24-44
+    :lines: 21-44
 
 ..
     >>> from sklearn.feature_extraction.image import grid_to_graph
@@ -212,10 +213,10 @@ transposed data.
    >>> X = np.reshape(images, (len(images), -1))
    >>> connectivity = grid_to_graph(*images[0].shape)
 
-   >>> agglo = cluster.WardAgglomeration(connectivity=connectivity,
-   ...                                   n_clusters=32)
+   >>> agglo = cluster.FeatureAgglomeration(connectivity=connectivity,
+   ...                                      n_clusters=32)
    >>> agglo.fit(X) # doctest: +ELLIPSIS
-   WardAgglomeration(compute_full_tree='auto',...
+   FeatureAgglomeration(affinity='euclidean', compute_full_tree='auto',...
    >>> X_reduced = agglo.transform(X)
 
    >>> X_approx = agglo.inverse_transform(X_reduced)
@@ -276,7 +277,7 @@ data by projecting on a principal subspace.
     >>> pca = decomposition.PCA()
     >>> pca.fit(X)
     PCA(copy=True, n_components=None, whiten=False)
-    >>> print pca.explained_variance_  # doctest: +SKIP
+    >>> print(pca.explained_variance_)  # doctest: +SKIP
     [  2.18565811e+00   1.19346747e+00   8.43026679e-32]
 
     >>> # As we can see, only the 2 first components are useful
@@ -316,8 +317,8 @@ a maximum amount of independent information. It is able to recover
 
     >>> # Compute ICA
     >>> ica = decomposition.FastICA()
-    >>> S_ = ica.fit(X).transform(X)  # Get the estimated sources
-    >>> A_ = ica.get_mixing_matrix()  # Get estimated mixing matrix
-    >>> np.allclose(X, np.dot(S_, A_.T))
+    >>> S_ = ica.fit_transform(X)  # Get the estimated sources
+    >>> A_ = ica.mixing_.T
+    >>> np.allclose(X,  np.dot(S_, A_) + ica.mean_)
     True
 

@@ -10,12 +10,12 @@ well as L1 and L2 penalized logistic regression.
 The logistic regression is not a multiclass classifier out of the box. As
 a result it can identify only the first class.
 """
-print __doc__
+print(__doc__)
 
 # Author: Alexandre Gramfort <alexandre.gramfort@inria.fr>
-# License: BSD Style.
+# License: BSD 3 clause
 
-import pylab as pl
+import matplotlib.pyplot as plt
 import numpy as np
 
 from sklearn.linear_model import LogisticRegression
@@ -34,14 +34,15 @@ C = 1.0
 # multiclass out of the box.
 classifiers = {'L1 logistic': LogisticRegression(C=C, penalty='l1'),
                'L2 logistic': LogisticRegression(C=C, penalty='l2'),
-               'Linear SVC': SVC(kernel='linear', C=C, probability=True)}
+               'Linear SVC': SVC(kernel='linear', C=C, probability=True,
+                                 random_state=0)}
 
 n_classifiers = len(classifiers)
 
-pl.figure(figsize=(3 * 2, n_classifiers * 2))
-pl.subplots_adjust(bottom=.2, top=.95)
+plt.figure(figsize=(3 * 2, n_classifiers * 2))
+plt.subplots_adjust(bottom=.2, top=.95)
 
-for index, (name, classifier) in enumerate(classifiers.iteritems()):
+for index, (name, classifier) in enumerate(classifiers.items()):
     classifier.fit(X, y)
 
     y_pred = classifier.predict(X)
@@ -56,20 +57,20 @@ for index, (name, classifier) in enumerate(classifiers.iteritems()):
     probas = classifier.predict_proba(Xfull)
     n_classes = np.unique(y_pred).size
     for k in range(n_classes):
-        pl.subplot(n_classifiers, n_classes, index * n_classes + k + 1)
-        pl.title("Class %d" % k)
+        plt.subplot(n_classifiers, n_classes, index * n_classes + k + 1)
+        plt.title("Class %d" % k)
         if k == 0:
-            pl.ylabel(name)
-        imshow_handle = pl.imshow(probas[:, k].reshape((100, 100)),
-                                  extent=(3, 9, 1, 5), origin='lower')
-        pl.xticks(())
-        pl.yticks(())
+            plt.ylabel(name)
+        imshow_handle = plt.imshow(probas[:, k].reshape((100, 100)),
+                                   extent=(3, 9, 1, 5), origin='lower')
+        plt.xticks(())
+        plt.yticks(())
         idx = (y_pred == k)
         if idx.any():
-            pl.scatter(X[idx, 0], X[idx, 1], marker='o', c='k')
+            plt.scatter(X[idx, 0], X[idx, 1], marker='o', c='k')
 
-ax = pl.axes([0.15, 0.04, 0.7, 0.05])
-pl.title("Probability")
-pl.colorbar(imshow_handle, cax=ax, orientation='horizontal')
+ax = plt.axes([0.15, 0.04, 0.7, 0.05])
+plt.title("Probability")
+plt.colorbar(imshow_handle, cax=ax, orientation='horizontal')
 
-pl.show()
+plt.show()

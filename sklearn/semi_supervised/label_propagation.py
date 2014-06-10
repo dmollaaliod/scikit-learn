@@ -53,7 +53,6 @@ Non-Parametric Function Induction in Semi-Supervised Learning. AISTAT 2005
 
 # Authors: Clay Woolam <clay@woolam.org>
 # Licence: BSD
-
 from abc import ABCMeta, abstractmethod
 from scipy import sparse
 import numpy as np
@@ -62,6 +61,7 @@ from ..base import BaseEstimator, ClassifierMixin
 from ..metrics.pairwise import rbf_kernel
 from ..utils.graph import graph_laplacian
 from ..utils.extmath import safe_sparse_dot
+from ..externals import six
 from ..neighbors.unsupervised import NearestNeighbors
 
 
@@ -72,7 +72,8 @@ def _not_converged(y_truth, y_prediction, tol=1e-3):
     return np.abs(y_truth - y_prediction).sum() > tol
 
 
-class BaseLabelPropagation(BaseEstimator, ClassifierMixin):
+class BaseLabelPropagation(six.with_metaclass(ABCMeta, BaseEstimator,
+                                              ClassifierMixin)):
     """Base class for label propagation module.
 
     Parameters
@@ -93,8 +94,8 @@ class BaseLabelPropagation(BaseEstimator, ClassifierMixin):
     tol : float
         Convergence tolerance: threshold to consider the system at steady
         state
+
     """
-    __metaclass__ = ABCMeta
 
     def __init__(self, kernel='rbf', gamma=20, n_neighbors=7,
                  alpha=1, max_iter=30, tol=1e-3):
@@ -279,6 +280,20 @@ class LabelPropagation(BaseLabelPropagation):
       Convergence tolerance: threshold to consider the system at steady
       state
 
+    Attributes
+    ----------
+    `X_` : array, shape = [n_samples, n_features]
+        Input array.
+
+    `classes_` : array, shape = [n_classes]
+        The distinct labels used in classifying instances.
+
+    `label_distributions_` : array, shape = [n_samples, n_classes]
+        Categorical distribution for each item.
+
+    `transduction_` : array, shape = [n_samples]
+        Label assigned to each item via the transduction.
+
     Examples
     --------
     >>> from sklearn import datasets
@@ -301,7 +316,7 @@ class LabelPropagation(BaseLabelPropagation):
 
     See Also
     --------
-    LabelSpreading : Alternate label proagation strategy more robust to noise
+    LabelSpreading : Alternate label propagation strategy more robust to noise
     """
     def _build_graph(self):
         """Matrix representing a fully connected graph between each sample
@@ -344,6 +359,20 @@ class LabelSpreading(BaseLabelPropagation):
       Convergence tolerance: threshold to consider the system at steady
       state
 
+    Attributes
+    ----------
+    `X_` : array, shape = [n_samples, n_features]
+        Input array.
+
+    `classes_` : array, shape = [n_classes]
+        The distinct labels used in classifying instances.
+
+    `label_distributions_` : array, shape = [n_samples, n_classes]
+        Categorical distribution for each item.
+
+    `transduction_` : array, shape = [n_samples]
+        Label assigned to each item via the transduction.
+
     Examples
     --------
     >>> from sklearn import datasets
@@ -361,7 +390,7 @@ class LabelSpreading(BaseLabelPropagation):
     References
     ----------
     Dengyong Zhou, Olivier Bousquet, Thomas Navin Lal, Jason Weston,
-    Bernhard Schölkopf. Learning with local and global consistency (2004)
+    Bernhard Schoelkopf. Learning with local and global consistency (2004)
     http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.115.3219
 
     See Also

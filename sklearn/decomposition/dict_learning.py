@@ -1,7 +1,8 @@
 """ Dictionary learning
 """
+from __future__ import print_function
 # Author: Vlad Niculae, Gael Varoquaux, Alexandre Gramfort
-# License: BSD
+# License: BSD 3 clause
 
 import time
 import sys
@@ -15,8 +16,9 @@ from numpy.lib.stride_tricks import as_strided
 
 from ..base import BaseEstimator, TransformerMixin
 from ..externals.joblib import Parallel, delayed, cpu_count
+from ..externals.six.moves import zip
 from ..utils import array2d, check_random_state, gen_even_slices
-from ..utils.extmath import randomized_svd
+from ..utils.extmath import randomized_svd, row_norms
 from ..linear_model import Lasso, orthogonal_mp_gram, LassoLars, Lars
 
 
@@ -104,8 +106,9 @@ def _sparse_encode(X, dictionary, gram, cov=None, algorithm='lasso_lars',
     elif algorithm == 'lasso_cd':
         alpha = float(regularization) / n_features  # account for scaling
         clf = Lasso(alpha=alpha, fit_intercept=False, precompute=gram,
-                    max_iter=max_iter)
-        clf.fit(dictionary.T, X.T, Xy=cov, coef_init=init)
+                    max_iter=max_iter, warm_start=True)
+        clf.coef_ = init
+        clf.fit(dictionary.T, X.T)
         new_code = clf.coef_
 
     elif algorithm == 'lars':
@@ -124,9 +127,9 @@ def _sparse_encode(X, dictionary, gram, cov=None, algorithm='lasso_lars',
                     np.maximum(np.abs(cov) - regularization, 0)).T)
 
     elif algorithm == 'omp':
-        norms_squared = np.sum((X ** 2), axis=1)
         new_code = orthogonal_mp_gram(gram, cov, regularization, None,
-                                      norms_squared, copy_Xy=copy_cov).T
+                                      row_norms(X, squared=True),
+                                      copy_Xy=copy_cov).T
     else:
         raise ValueError('Sparse coding method must be "lasso_lars" '
                          '"lasso_cd",  "lasso", "threshold" or "omp", got %s.'
@@ -225,7 +228,7 @@ def sparse_encode(X, dictionary, gram=None, cov=None, algorithm='lasso_lars',
     if algorithm in ('lars', 'omp'):
         regularization = n_nonzero_coefs
         if regularization is None:
-            regularization = max(n_features / 10, 1)
+            regularization = min(max(n_features / 10, 1), n_components)
     else:
         regularization = alpha
         if regularization is None:
@@ -292,7 +295,7 @@ def _update_dict(dictionary, Y, code, verbose=False, return_r2=False,
     R += Y
     R = np.asfortranarray(R)
     ger, = linalg.get_blas_funcs(('ger',), (dictionary, code))
-    for k in xrange(n_components):
+    for k in range(n_components):
         # R <- 1.0 * U_k * V_k^T + R
         R = ger(1.0, dictionary[:, k], code[k, :], a=R, overwrite_a=True)
         dictionary[:, k] = np.dot(R, code[k, :].T)
@@ -303,7 +306,7 @@ def _update_dict(dictionary, Y, code, verbose=False, return_r2=False,
                 sys.stdout.write("+")
                 sys.stdout.flush()
             elif verbose:
-                print "Adding new random atom"
+                print("Adding new random atom")
             dictionary[:, k] = random_state.randn(n_samples)
             # Setting corresponding coefs to 0
             code[k, :] = 0.0
@@ -440,9 +443,9 @@ def dict_learning(X, n_components, alpha, max_iter=100, tol=1e-8,
     current_cost = np.nan
 
     if verbose == 1:
-        print '[dict_learning]',
+        print('[dict_learning]', end=' ')
 
-    for ii in xrange(max_iter):
+    for ii in range(max_iter):
         dt = (time.time() - t0)
         if verbose == 1:
             sys.stdout.write(".")
@@ -471,9 +474,9 @@ def dict_learning(X, n_components, alpha, max_iter=100, tol=1e-8,
             if dE < tol * errors[-1]:
                 if verbose == 1:
                     # A line return
-                    print ""
+                    print("")
                 elif verbose:
-                    print "--- Convergence reached after %d iterations" % ii
+                    print("--- Convergence reached after %d iterations" % ii)
                 break
         if ii % 5 == 0 and callback is not None:
             callback(locals())
@@ -484,7 +487,8 @@ def dict_learning(X, n_components, alpha, max_iter=100, tol=1e-8,
 def dict_learning_online(X, n_components=2, alpha=1, n_iter=100,
                          return_code=True, dict_init=None, callback=None,
                          batch_size=3, verbose=False, shuffle=True, n_jobs=1,
-                         method='lars', iter_offset=0, random_state=None):
+                         method='lars', iter_offset=0, random_state=None,
+                         return_inner_stats=False, inner_stats=None):
     """Solves a dictionary learning matrix factorization problem online.
 
     Finds the best dictionary and the corresponding sparse code for
@@ -506,7 +510,7 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100,
     n_components : int,
         Number of dictionary atoms to extract.
 
-    alpha : int,
+    alpha : float,
         Sparsity controlling parameter.
 
     n_iter : int,
@@ -546,6 +550,19 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100,
 
     random_state : int or RandomState
         Pseudo number generator state used for random sampling.
+
+    return_inner_stats : boolean, optional
+        Return the inner statistics A (dictionary covariance) and B
+        (data approximation). Useful to restart the algorithm in an
+        online setting. If return_inner_stats is True, return_code is
+        ignored
+
+    inner_stats : tuple of (A, B) ndarrays
+        Inner sufficient statistics that are kept by the algorithm.
+        Passing them at initialization is useful in online settings, to
+        avoid loosing the history of the evolution.
+        A (n_components, n_components) is the dictionary covariance matrix.
+        B (n_features, n_components) is the data approximation matrix
 
     Returns
     -------
@@ -593,7 +610,7 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100,
     dictionary = np.ascontiguousarray(dictionary.T)
 
     if verbose == 1:
-        print '[dict_learning]',
+        print('[dict_learning]', end=' ')
 
     n_batches = floor(float(len(X)) / batch_size)
     if shuffle:
@@ -605,12 +622,15 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100,
     batches = itertools.cycle(batches)
 
     # The covariance of the dictionary
-    A = np.zeros((n_components, n_components))
-    # The data approximation
-    B = np.zeros((n_features, n_components))
+    if inner_stats is None:
+        A = np.zeros((n_components, n_components))
+        # The data approximation
+        B = np.zeros((n_features, n_components))
+    else:
+        A = inner_stats[0].copy()
+        B = inner_stats[1].copy()
 
-    for ii, this_X in itertools.izip(xrange(iter_offset, iter_offset + n_iter),
-                                     batches):
+    for ii, this_X in zip(range(iter_offset, iter_offset + n_iter), batches):
         dt = (time.time() - t0)
         if verbose == 1:
             sys.stdout.write(".")
@@ -621,7 +641,7 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100,
                        % (ii, dt, dt / 60))
 
         this_code = sparse_encode(this_X, dictionary.T, algorithm=method,
-                                  alpha=alpha).T
+                                  alpha=alpha, n_jobs=n_jobs).T
 
         # Update the auxiliary variables
         if ii < batch_size - 1:
@@ -645,16 +665,18 @@ def dict_learning_online(X, n_components=2, alpha=1, n_iter=100,
         if callback is not None:
             callback(locals())
 
+    if return_inner_stats:
+        return dictionary.T, (A, B)
     if return_code:
         if verbose > 1:
-            print 'Learning code...',
+            print('Learning code...', end=' ')
         elif verbose == 1:
-            print '|',
+            print('|', end=' ')
         code = sparse_encode(X, dictionary.T, algorithm=method, alpha=alpha,
                              n_jobs=n_jobs)
         if verbose > 1:
             dt = (time.time() - t0)
-            print 'done (total time: % 3is, % 4.1fmn)' % (dt, dt / 60)
+            print('done (total time: % 3is, % 4.1fmn)' % (dt, dt / 60))
         return code, dictionary.T
 
     return dictionary.T
@@ -813,7 +835,7 @@ class DictionaryLearning(BaseEstimator, SparseCodingMixin):
     n_components : int,
         number of dictionary elements to extract
 
-    alpha : int,
+    alpha : float,
         sparsity controlling parameter
 
     max_iter : int,
@@ -929,7 +951,7 @@ class DictionaryLearning(BaseEstimator, SparseCodingMixin):
         self: object
             Returns the object itself
         """
-        self.random_state = check_random_state(self.random_state)
+        random_state = check_random_state(self.random_state)
         X = array2d(X)
         if self.n_components is None:
             n_components = X.shape[1]
@@ -943,7 +965,7 @@ class DictionaryLearning(BaseEstimator, SparseCodingMixin):
                                 code_init=self.code_init,
                                 dict_init=self.dict_init,
                                 verbose=self.verbose,
-                                random_state=self.random_state)
+                                random_state=random_state)
         self.components_ = U
         self.error_ = E
         return self
@@ -966,7 +988,7 @@ class MiniBatchDictionaryLearning(BaseEstimator, SparseCodingMixin):
     n_components : int,
         number of dictionary elements to extract
 
-    alpha : int,
+    alpha : float,
         sparsity controlling parameter
 
     n_iter : int,
@@ -1033,6 +1055,16 @@ class MiniBatchDictionaryLearning(BaseEstimator, SparseCodingMixin):
     `components_` : array, [n_components, n_features]
         components extracted from the data
 
+    `inner_stats_` : tuple of (A, B) ndarrays
+        Internal sufficient statistics that are kept by the algorithm.
+        Keeping them is useful in online settings, to avoid loosing the
+        history of the evolution, but they shouldn't have any use for the
+        end user.
+        A (n_components, n_components) is the dictionary covariance matrix.
+        B (n_features, n_components) is the data approximation matrix
+
+
+
     Notes
     -----
     **References:**
@@ -1081,25 +1113,31 @@ class MiniBatchDictionaryLearning(BaseEstimator, SparseCodingMixin):
         self : object
             Returns the instance itself.
         """
-        self.random_state = check_random_state(self.random_state)
+        random_state = check_random_state(self.random_state)
         X = array2d(X)
         if self.n_components is None:
             n_components = X.shape[1]
         else:
             n_components = self.n_components
 
-        U = dict_learning_online(X, n_components, self.alpha,
-                                 n_iter=self.n_iter, return_code=False,
-                                 method=self.fit_algorithm,
-                                 n_jobs=self.n_jobs,
-                                 dict_init=self.dict_init,
-                                 batch_size=self.batch_size,
-                                 shuffle=self.shuffle, verbose=self.verbose,
-                                 random_state=self.random_state)
+        U, (A, B) = dict_learning_online(X, n_components, self.alpha,
+                                         n_iter=self.n_iter, return_code=False,
+                                         method=self.fit_algorithm,
+                                         n_jobs=self.n_jobs,
+                                         dict_init=self.dict_init,
+                                         batch_size=self.batch_size,
+                                         shuffle=self.shuffle,
+                                         verbose=self.verbose,
+                                         random_state=random_state,
+                                         return_inner_stats=True)
         self.components_ = U
+        # Keep track of the state of the algorithm to be able to do
+        # some online fitting (partial_fit)
+        self.inner_stats_ = (A, B)
+        self.iter_offset_ = self.n_iter
         return self
 
-    def partial_fit(self, X, y=None, iter_offset=0):
+    def partial_fit(self, X, y=None, iter_offset=None):
         """Updates the model using the data in X as a mini-batch.
 
         Parameters
@@ -1108,24 +1146,43 @@ class MiniBatchDictionaryLearning(BaseEstimator, SparseCodingMixin):
             Training vector, where n_samples in the number of samples
             and n_features is the number of features.
 
+        iter_offset: integer, optional
+            The number of iteration on data batches that has been
+            performed before this call to partial_fit. This is optional:
+            if no number is passed, the memory of the object is
+            used.
+
         Returns
         -------
         self : object
             Returns the instance itself.
         """
-        self.random_state = check_random_state(self.random_state)
+        if not hasattr(self, 'random_state_'):
+            self.random_state_ = check_random_state(self.random_state)
         X = array2d(X)
         if hasattr(self, 'components_'):
             dict_init = self.components_
         else:
             dict_init = self.dict_init
-        U = dict_learning_online(X, self.n_components, self.alpha,
-                                 n_iter=self.n_iter,
-                                 method=self.fit_algorithm,
-                                 n_jobs=self.n_jobs, dict_init=dict_init,
-                                 batch_size=len(X), shuffle=False,
-                                 verbose=self.verbose, return_code=False,
-                                 iter_offset=iter_offset,
-                                 random_state=self.random_state)
+        inner_stats = getattr(self, 'inner_stats_', None)
+        if iter_offset is None:
+            iter_offset = getattr(self, 'iter_offset_', 0)
+        U, (A, B) = dict_learning_online(X, self.n_components, self.alpha,
+                                         n_iter=self.n_iter,
+                                         method=self.fit_algorithm,
+                                         n_jobs=self.n_jobs,
+                                         dict_init=dict_init,
+                                         batch_size=len(X), shuffle=False,
+                                         verbose=self.verbose,
+                                         return_code=False,
+                                         iter_offset=iter_offset,
+                                         random_state=self.random_state_,
+                                         return_inner_stats=True,
+                                         inner_stats=inner_stats)
         self.components_ = U
+
+        # Keep track of the state of the algorithm to be able to do
+        # some online fitting (partial_fit)
+        self.inner_stats_ = (A, B)
+        self.iter_offset_ = iter_offset + self.n_iter
         return self

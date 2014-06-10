@@ -1,24 +1,26 @@
 # Authors: Peter Prettenhofer <peter.prettenhofer@gmail.com> (main author)
 #          Mathieu Blondel (partial_fit support)
 #
-# License: BSD Style.
+# License: BSD 3 clause
 """Classification and regression using Stochastic Gradient Descent (SGD)."""
 
 import numpy as np
 import scipy.sparse as sp
 
 from abc import ABCMeta, abstractmethod
-import warnings
 
 from ..externals.joblib import Parallel, delayed
 
-from .base import LinearClassifierMixin
+from .base import LinearClassifierMixin, SparseCoefMixin
 from ..base import BaseEstimator, RegressorMixin
-from ..feature_selection.selector_mixin import SelectorMixin
-from ..utils import array2d, atleast2d_or_csr, check_arrays, deprecated
+from ..feature_selection.from_model import _LearntSelectorMixin
+from ..utils import (atleast2d_or_csr, check_arrays, check_random_state,
+                     column_or_1d)
 from ..utils.extmath import safe_sparse_dot
+from ..utils.multiclass import _check_partial_fit_first_call
+from ..externals import six
 
-from .sgd_fast import plain_sgd as plain_sgd
+from .sgd_fast import plain_sgd
 from ..utils.seq_dataset import ArrayDataset, CSRDataset
 from ..utils import compute_class_weight
 from .sgd_fast import Hinge
@@ -44,16 +46,14 @@ DEFAULT_EPSILON = 0.1
 """Default value of ``epsilon`` parameter. """
 
 
-class BaseSGD(BaseEstimator):
+class BaseSGD(six.with_metaclass(ABCMeta, BaseEstimator, SparseCoefMixin)):
     """Base class for SGD classification and regression."""
-
-    __metaclass__ = ABCMeta
 
     def __init__(self, loss, penalty='l2', alpha=0.0001, C=1.0,
                  l1_ratio=0.15, fit_intercept=True, n_iter=5, shuffle=False,
                  verbose=0, epsilon=0.1, random_state=None,
                  learning_rate="optimal", eta0=0.0, power_t=0.5,
-                 warm_start=False, rho=None):
+                 warm_start=False):
         self.loss = loss
         self.penalty = penalty
         self.learning_rate = learning_rate
@@ -61,10 +61,6 @@ class BaseSGD(BaseEstimator):
         self.alpha = alpha
         self.C = C
         self.l1_ratio = l1_ratio
-        if rho is not None:
-            self.l1_ratio = 1 - rho
-            warnings.warn("rho was replaced by l1_ratio and will be removed "
-                          "in 0.15", DeprecationWarning)
         self.fit_intercept = fit_intercept
         self.n_iter = n_iter
         self.shuffle = shuffle
@@ -114,8 +110,8 @@ class BaseSGD(BaseEstimator):
     def _init_t(self, loss_function):
         """Initialize iteration counter attr ``t_``.
 
-        If ``self.loss=='optimal'`` initialize ``t_`` such that ``eta`` at
-        first sample equals ``self.eta0``.
+        If ``self.learning_rate=='optimal'`` initialize ``t_`` such that
+        ``eta`` at first sample equals ``self.eta0``.
         """
         self.t_ = 1.0
         if self.learning_rate == "optimal":
@@ -163,15 +159,6 @@ class BaseSGD(BaseEstimator):
         if sample_weight.shape[0] != n_samples:
             raise ValueError("Shapes of X and sample_weight do not match.")
         return sample_weight
-
-    def _set_coef(self, coef_):
-        """Make sure that coef_ is fortran-style and 2d.
-
-        Fortran-style memory layout is needed to ensure that computing
-        the dot product between input ``X`` and ``coef_`` does not trigger
-        a memory copy.
-        """
-        self.coef_ = np.asfortranarray(array2d(coef_))
 
     def _allocate_parameter_mem(self, n_classes, n_features, coef_init=None,
                                 intercept_init=None):
@@ -274,16 +261,23 @@ def fit_binary(est, i, X, y, alpha, C, learning_rate, n_iter,
     penalty_type = est._get_penalty_type(est.penalty)
     learning_rate_type = est._get_learning_rate_type(learning_rate)
 
+    # XXX should have random_state_!
+    random_state = check_random_state(est.random_state)
+    # numpy mtrand expects a C long which is a signed 32 bit integer under
+    # Windows
+    seed = random_state.randint(0, np.iinfo(np.int32).max)
+
     return plain_sgd(coef, intercept, est.loss_function,
                      penalty_type, alpha, C, est.l1_ratio,
                      dataset, n_iter, int(est.fit_intercept),
-                     int(est.verbose), int(est.shuffle), est.random_state,
+                     int(est.verbose), int(est.shuffle), seed,
                      pos_weight, neg_weight,
                      learning_rate_type, est.eta0,
                      est.power_t, est.t_, intercept_decay)
 
 
-class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
+class BaseSGDClassifier(six.with_metaclass(ABCMeta, BaseSGD,
+                                           LinearClassifierMixin)):
 
     loss_functions = {
         "hinge": (Hinge, 1.0),
@@ -298,17 +292,12 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
                                         DEFAULT_EPSILON),
     }
 
+    @abstractmethod
     def __init__(self, loss="hinge", penalty='l2', alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, n_iter=5, shuffle=False, verbose=0,
                  epsilon=DEFAULT_EPSILON, n_jobs=1, random_state=None,
                  learning_rate="optimal", eta0=0.0, power_t=0.5,
-                 class_weight=None, warm_start=False, rho=None, seed=None):
-
-        if seed is not None:
-            warnings.warn("Parameter 'seed' was renamed to 'random_state' for"
-                          " consistency and will be removed in 0.15",
-                          DeprecationWarning)
-            random_state = seed
+                 class_weight=None, warm_start=False):
 
         super(BaseSGDClassifier, self).__init__(loss=loss, penalty=penalty,
                                                 alpha=alpha, l1_ratio=l1_ratio,
@@ -317,7 +306,6 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
                                                 verbose=verbose,
                                                 epsilon=epsilon,
                                                 random_state=random_state,
-                                                rho=rho,
                                                 learning_rate=learning_rate,
                                                 eta0=eta0, power_t=power_t,
                                                 warm_start=warm_start)
@@ -325,42 +313,29 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
         self.classes_ = None
         self.n_jobs = int(n_jobs)
 
-    @property
-    @deprecated("Parameter 'seed' war renamed to 'random_state' for"
-                " consistency and will be removed in 0.15")
-    def seed(self):
-        return self.random_state
-
     def _partial_fit(self, X, y, alpha, C,
                      loss, learning_rate, n_iter,
                      classes, sample_weight,
                      coef_init, intercept_init):
         X = atleast2d_or_csr(X, dtype=np.float64, order="C")
-        y = np.asarray(y).ravel()
+        y = column_or_1d(y, warn=True)
 
         n_samples, n_features = X.shape
         _check_fit_data(X, y)
 
         self._validate_params()
-
-        if self.classes_ is None and classes is None:
-            raise ValueError("classes must be passed on the first call "
-                             "to partial_fit.")
-        elif classes is not None and self.classes_ is not None:
-            if not np.all(self.classes_ == np.unique(classes)):
-                raise ValueError("`classes` is not the same as on last call "
-                                 "to partial_fit.")
-        elif classes is not None:
-            self.classes_ = classes
+        _check_partial_fit_first_call(self, classes)
 
         n_classes = self.classes_.shape[0]
 
         # Allocate datastructures from input arguments
+        y_ind = np.searchsorted(self.classes_, y)   # XXX use a LabelBinarizer?
         self._expanded_class_weight = compute_class_weight(self.class_weight,
-                                                           self.classes_, y)
+                                                           self.classes_,
+                                                           y_ind)
         sample_weight = self._validate_sample_weight(sample_weight, n_samples)
 
-        if self.coef_ is None:
+        if self.coef_ is None or coef_init is not None:
             self._allocate_parameter_mem(n_classes, n_features,
                                          coef_init, intercept_init)
 
@@ -385,16 +360,10 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
 
         return self
 
-    def _fit(self, X, y, alpha, C, loss, learning_rate,
-             coef_init=None, intercept_init=None, class_weight=None,
-             sample_weight=None):
-        if class_weight is not None:
-            warnings.warn("Using 'class_weight' as a parameter to the 'fit'"
-                          "method is deprecated and will be removed in 0.13. "
-                          "Set it on initialization instead.",
-                          DeprecationWarning, stacklevel=2)
-
-            self.class_weight = class_weight
+    def _fit(self, X, y, alpha, C, loss, learning_rate, coef_init=None,
+             intercept_init=None, sample_weight=None):
+        if hasattr(self, "classes_"):
+            self.classes_ = None
 
         X = atleast2d_or_csr(X, dtype=np.float64, order="C")
         n_samples, n_features = X.shape
@@ -418,10 +387,6 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
         self._partial_fit(X, y, alpha, C, loss, learning_rate, self.n_iter,
                           classes, sample_weight, coef_init, intercept_init)
 
-        # fitting is over, we can now transform coef_ to fortran order
-        # for faster predictions
-        self._set_coef(self.coef_)
-
         return self
 
     def _fit_binary(self, X, y, alpha, C, sample_weight,
@@ -444,15 +409,15 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
         Each binary classifier predicts one class versus all others. This
         strategy is called OVA: One Versus All.
         """
-        # Use joblib to fit OvA in parallel
-        result = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+        # Use joblib to fit OvA in parallel.
+        result = Parallel(n_jobs=self.n_jobs, backend="threading",
+                          verbose=self.verbose)(
             delayed(fit_binary)(self, i, X, y, alpha, C, learning_rate,
                                 n_iter, self._expanded_class_weight[i], 1.,
                                 sample_weight)
-            for i in xrange(len(self.classes_)))
+            for i in range(len(self.classes_)))
 
-        for i, (coef, intercept) in enumerate(result):
-            self.coef_[i] = coef
+        for i, (_, intercept) in enumerate(result):
             self.intercept_[i] = intercept
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
@@ -500,7 +465,7 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
             Target values
 
         coef_init : array, shape = [n_classes,n_features]
-            The initial coeffients to warm-start the optimization.
+            The initial coefficients to warm-start the optimization.
 
         intercept_init : array, shape = [n_classes]
             The initial intercept to warm-start the optimization.
@@ -516,16 +481,22 @@ class BaseSGDClassifier(BaseSGD, LinearClassifierMixin):
         return self._fit(X, y, alpha=self.alpha, C=1.0,
                          loss=self.loss, learning_rate=self.learning_rate,
                          coef_init=coef_init, intercept_init=intercept_init,
-                         class_weight=class_weight,
                          sample_weight=sample_weight)
 
 
-class SGDClassifier(BaseSGDClassifier, SelectorMixin):
-    """Linear model fitted by minimizing a regularized empirical loss with SGD.
+class SGDClassifier(BaseSGDClassifier, _LearntSelectorMixin):
+    """Linear classifiers (SVM, logistic regression, a.o.) with SGD training.
 
-    SGD stands for Stochastic Gradient Descent: the gradient of the loss is
-    estimated each sample at a time and the model is updated along the way with
-    a decreasing strength schedule (aka learning rate).
+    This estimator implements regularized linear models with stochastic
+    gradient descent (SGD) learning: the gradient of the loss is estimated
+    each sample at a time and the model is updated along the way with a
+    decreasing strength schedule (aka learning rate). SGD allows minibatch
+    (online/out-of-core) learning, see the partial_fit method.
+
+    This implementation works with data represented as dense or sparse arrays
+    of floating point values for the features. The model it fits can be
+    controlled with the loss parameter; by default, it fits a linear support
+    vector machine (SVM).
 
     The regularizer is a penalty added to the loss function that shrinks model
     parameters towards the zero vector using either the squared euclidean norm
@@ -534,22 +505,25 @@ class SGDClassifier(BaseSGDClassifier, SelectorMixin):
     update is truncated to 0.0 to allow for learning sparse models and achieve
     online feature selection.
 
-    This implementation works with data represented as dense or sparse arrays
-    of floating point values for the features.
-
     Parameters
     ----------
-    loss : str, 'hinge' or 'log' or 'modified_huber'
-        The loss function to be used. Defaults to 'hinge'. The hinge loss is
-        a margin loss used by standard linear SVM models. The 'log' loss is
-        the loss of logistic regression models and can be used for
-        probability estimation in binary classifiers. 'modified_huber'
-        is another smooth loss that brings tolerance to outliers.
+    loss : str, 'hinge', 'log', 'modified_huber', 'squared_hinge',\
+                'perceptron', or a regression loss: 'squared_loss', 'huber',\
+                'epsilon_insensitive', or 'squared_epsilon_insensitive'
+        The loss function to be used. Defaults to 'hinge', which gives a
+        linear SVM.
+        The 'log' loss gives logistic regression, a probabilistic classifier.
+        'modified_huber' is another smooth loss that brings tolerance to
+        outliers as well as probability estimates.
+        'squared_hinge' is like hinge but is quadratically penalized.
+        'perceptron' is the linear loss used by the perceptron algorithm.
+        The other losses are designed for regression but can be useful in
+        classification as well; see SGDRegressor for a description.
 
     penalty : str, 'l2' or 'l1' or 'elasticnet'
         The penalty (aka regularization term) to be used. Defaults to 'l2'
         which is the standard regularizer for linear SVM models. 'l1' and
-        'elasticnet' migh bring sparsity to the model (feature selection)
+        'elasticnet' might bring sparsity to the model (feature selection)
         not achievable with 'l2'.
 
     alpha : float
@@ -580,10 +554,12 @@ class SGDClassifier(BaseSGDClassifier, SelectorMixin):
         The verbosity level
 
     epsilon: float
-        Epsilon in the epsilon-insensitive loss functions;
-        only if `loss=='huber'` or `loss='epsilon_insensitive'`.
-        If the difference between the current prediction and the correct label
-        is below this threshold, the model is not updated.
+        Epsilon in the epsilon-insensitive loss functions; only if `loss` is
+        'huber', 'epsilon_insensitive', or 'squared_epsilon_insensitive'.
+        For 'huber', determines the threshold at which it becomes less
+        important to get the prediction exactly right.
+        For epsilon-insensitive, any differences between the current prediction
+        and the correct label are ignored if they are less than this threshold.
 
     n_jobs: integer, optional
         The number of CPUs to use to do the OVA (One Versus All, for
@@ -593,11 +569,13 @@ class SGDClassifier(BaseSGDClassifier, SelectorMixin):
     learning_rate : string, optional
         The learning rate:
         constant: eta = eta0
-        optimal: eta = 1.0/(t+t0) [default]
+        optimal: eta = 1.0 / (t + t0) [default]
         invscaling: eta = eta0 / pow(t, power_t)
 
     eta0 : double
-        The initial learning rate [default 0.01].
+        The initial learning rate for the 'constant' or 'invscaling'
+        schedules. The default value is 0.0 as eta0 is not used by the
+        default schedule 'optimal'.
 
     power_t : double
         The exponent for inverse scaling learning rate [default 0.5].
@@ -636,7 +614,7 @@ class SGDClassifier(BaseSGDClassifier, SelectorMixin):
     SGDClassifier(alpha=0.0001, class_weight=None, epsilon=0.1, eta0=0.0,
             fit_intercept=True, l1_ratio=0.15, learning_rate='optimal',
             loss='hinge', n_iter=5, n_jobs=1, penalty='l2', power_t=0.5,
-            random_state=None, rho=None, shuffle=False,
+            random_state=None, shuffle=False,
             verbose=0, warm_start=False)
     >>> print(clf.predict([[-0.8, -1]]))
     [1]
@@ -647,10 +625,35 @@ class SGDClassifier(BaseSGDClassifier, SelectorMixin):
 
     """
 
-    def predict_proba(self, X):
+    def __init__(self, loss="hinge", penalty='l2', alpha=0.0001, l1_ratio=0.15,
+                 fit_intercept=True, n_iter=5, shuffle=False, verbose=0,
+                 epsilon=DEFAULT_EPSILON, n_jobs=1, random_state=None,
+                 learning_rate="optimal", eta0=0.0, power_t=0.5,
+                 class_weight=None, warm_start=False):
+        super(SGDClassifier, self).__init__(
+            loss=loss, penalty=penalty, alpha=alpha, l1_ratio=l1_ratio,
+            fit_intercept=fit_intercept, n_iter=n_iter, shuffle=shuffle,
+            verbose=verbose, epsilon=epsilon, n_jobs=n_jobs,
+            random_state=random_state, learning_rate=learning_rate, eta0=eta0,
+            power_t=power_t, class_weight=class_weight, warm_start=warm_start)
+
+    def _check_proba(self):
+        if self.loss not in ("log", "modified_huber"):
+            raise AttributeError("probability estimates are not available for"
+                                 " loss=%r" % self.loss)
+
+    @property
+    def predict_proba(self):
         """Probability estimates.
 
-        Probability estimates are only supported for binary classification.
+        This method is only available for log loss and modified Huber loss.
+
+        Multiclass probability estimates are derived from binary (one-vs.-rest)
+        estimates by simple normalization, as recommended by Zadrozny and
+        Elkan.
+
+        Binary probability estimates for loss="modified_huber" are given by
+        (clip(decision_function(X), -1, 1) + 1) / 2.
 
         Parameters
         ----------
@@ -664,34 +667,68 @@ class SGDClassifier(BaseSGDClassifier, SelectorMixin):
 
         References
         ----------
+        Zadrozny and Elkan, "Transforming classifier scores into multiclass
+        probability estimates", SIGKDD'02,
+        http://www.research.ibm.com/people/z/zadrozny/kdd2002-Transf.pdf
 
         The justification for the formula in the loss="modified_huber"
         case is in the appendix B in:
         http://jmlr.csail.mit.edu/papers/volume2/zhang02c/zhang02c.pdf
         """
-        if len(self.classes_) != 2:
-            raise NotImplementedError("predict_(log_)proba only supported"
-                                      " for binary classification")
+        self._check_proba()
+        return self._predict_proba
 
-        scores = self.decision_function(X)
-        proba = np.ones((scores.shape[0], 2), dtype=np.float64)
+    def _predict_proba(self, X):
         if self.loss == "log":
-            proba[:, 1] = 1. / (1. + np.exp(-scores))
+            return self._predict_proba_lr(X)
 
         elif self.loss == "modified_huber":
-            proba[:, 1] = (np.clip(scores, -1, 1) + 1) / 2.
+            binary = (len(self.classes_) == 2)
+            scores = self.decision_function(X)
+
+            if binary:
+                prob2 = np.ones((scores.shape[0], 2))
+                prob = prob2[:, 1]
+            else:
+                prob = scores
+
+            np.clip(scores, -1, 1, prob)
+            prob += 1.
+            prob /= 2.
+
+            if binary:
+                prob2[:, 0] -= prob
+                prob = prob2
+            else:
+                # the above might assign zero to all classes, which doesn't
+                # normalize neatly; work around this to produce uniform
+                # probabilities
+                prob_sum = prob.sum(axis=1)
+                all_zero = (prob_sum == 0)
+                if np.any(all_zero):
+                    prob[all_zero, :] = 1
+                    prob_sum[all_zero] = len(self.classes_)
+
+                # normalize
+                prob /= prob_sum.reshape((prob.shape[0], -1))
+
+            return prob
 
         else:
             raise NotImplementedError("predict_(log_)proba only supported when"
                                       " loss='log' or loss='modified_huber' "
-                                      "(%s given)" % self.loss)
-        proba[:, 0] -= proba[:, 1]
-        return proba
+                                      "(%r given)" % self.loss)
 
-    def predict_log_proba(self, X):
+    @property
+    def predict_log_proba(self):
         """Log of probability estimates.
 
-        Log probability estimates are only supported for binary classification.
+        This method is only available for log loss and modified Huber loss.
+
+        When loss="modified_huber", probability estimates may be hard zeros
+        and ones, so taking the logarithm is not possible.
+
+        See ``predict_proba`` for details.
 
         Parameters
         ----------
@@ -704,6 +741,10 @@ class SGDClassifier(BaseSGDClassifier, SelectorMixin):
             model, where classes are ordered as they are in
             `self.classes_`.
         """
+        self._check_proba()
+        return self._predict_log_proba
+
+    def _predict_log_proba(self, X):
         return np.log(self.predict_proba(X))
 
 
@@ -717,11 +758,12 @@ class BaseSGDRegressor(BaseSGD, RegressorMixin):
                                         DEFAULT_EPSILON),
     }
 
+    @abstractmethod
     def __init__(self, loss="squared_loss", penalty="l2", alpha=0.0001,
                  l1_ratio=0.15, fit_intercept=True, n_iter=5, shuffle=False,
                  verbose=0, epsilon=DEFAULT_EPSILON, random_state=None,
                  learning_rate="invscaling", eta0=0.01, power_t=0.25,
-                 warm_start=False, rho=None):
+                 warm_start=False):
         super(BaseSGDRegressor, self).__init__(loss=loss, penalty=penalty,
                                                alpha=alpha, l1_ratio=l1_ratio,
                                                fit_intercept=fit_intercept,
@@ -729,17 +771,16 @@ class BaseSGDRegressor(BaseSGD, RegressorMixin):
                                                verbose=verbose,
                                                epsilon=epsilon,
                                                random_state=random_state,
-                                               rho=rho,
                                                learning_rate=learning_rate,
                                                eta0=eta0, power_t=power_t,
-                                               warm_start=False)
+                                               warm_start=warm_start)
 
     def _partial_fit(self, X, y, alpha, C, loss, learning_rate,
                      n_iter, sample_weight,
                      coef_init, intercept_init):
         X, y = check_arrays(X, y, sparse_format="csr", copy=False,
                             check_ccontiguous=True, dtype=np.float64)
-        y = y.ravel()
+        y = column_or_1d(y, warn=True)
 
         n_samples, n_features = X.shape
         _check_fit_data(X, y)
@@ -816,7 +857,7 @@ class BaseSGDRegressor(BaseSGD, RegressorMixin):
             Target values
 
         coef_init : array, shape = [n_features]
-            The initial coeffients to warm-start the optimization.
+            The initial coefficients to warm-start the optimization.
 
         intercept_init : array, shape = [1]
             The initial intercept to warm-start the optimization.
@@ -847,7 +888,8 @@ class BaseSGDRegressor(BaseSGD, RegressorMixin):
            Predicted target values per element in X.
         """
         X = atleast2d_or_csr(X)
-        scores = safe_sparse_dot(X, self.coef_) + self.intercept_
+        scores = safe_sparse_dot(X, self.coef_.T,
+                                 dense_output=True) + self.intercept_
         return scores.ravel()
 
     def predict(self, X):
@@ -875,6 +917,11 @@ class BaseSGDRegressor(BaseSGD, RegressorMixin):
         if self.t_ is None:
             self._init_t(loss_function)
 
+        random_state = check_random_state(self.random_state)
+        # numpy mtrand expects a C long which is a signed 32 bit integer under
+        # Windows
+        seed = random_state.randint(0, np.iinfo(np.int32).max)
+
         self.coef_, intercept = plain_sgd(self.coef_,
                                           self.intercept_[0],
                                           loss_function,
@@ -886,7 +933,7 @@ class BaseSGDRegressor(BaseSGD, RegressorMixin):
                                           int(self.fit_intercept),
                                           int(self.verbose),
                                           int(self.shuffle),
-                                          self.random_state,
+                                          seed,
                                           1.0, 1.0,
                                           learning_rate_type,
                                           self.eta0, self.power_t, self.t_,
@@ -895,7 +942,7 @@ class BaseSGDRegressor(BaseSGD, RegressorMixin):
         self.intercept_ = np.atleast_1d(intercept)
 
 
-class SGDRegressor(BaseSGDRegressor, SelectorMixin):
+class SGDRegressor(BaseSGDRegressor, _LearntSelectorMixin):
     """Linear model fitted by minimizing a regularized empirical loss with SGD
 
     SGD stands for Stochastic Gradient Descent: the gradient of the loss is
@@ -914,10 +961,15 @@ class SGDRegressor(BaseSGDRegressor, SelectorMixin):
 
     Parameters
     ----------
-    loss : str, 'squared_loss' or 'huber'
+    loss : str, 'squared_loss', 'huber', 'epsilon_insensitive', \
+                or 'squared_epsilon_insensitive'
         The loss function to be used. Defaults to 'squared_loss' which refers
-        to the ordinary least squares fit. 'huber' is an epsilon insensitive
-        loss function for robust regression.
+        to the ordinary least squares fit. 'huber' modifies 'squared_loss' to
+        focus less on getting outliers correct by switching from squared to
+        linear loss past a distance of epsilon. 'epsilon_insensitive' ignores
+        errors less than epsilon and is linear past that; this is the loss
+        function used in SVR. 'squared_epsilon_insensitive' is the same but
+        becomes squared loss past a tolerance of epsilon.
 
     penalty : str, 'l2' or 'l1' or 'elasticnet'
         The penalty (aka regularization term) to be used. Defaults to 'l2'
@@ -953,10 +1005,12 @@ class SGDRegressor(BaseSGDRegressor, SelectorMixin):
         The verbosity level.
 
     epsilon: float
-        Epsilon in the epsilon-insensitive loss functions;
-        only if `loss=='huber'` or `loss='epsilon_insensitive'`.
-        If the difference between the current prediction and the correct label
-        is below this threshold, the model is not updated.
+        Epsilon in the epsilon-insensitive loss functions; only if `loss` is
+        'huber', 'epsilon_insensitive', or 'squared_epsilon_insensitive'.
+        For 'huber', determines the threshold at which it becomes less
+        important to get the prediction exactly right.
+        For epsilon-insensitive, any differences between the current prediction
+        and the correct label are ignored if they are less than this threshold.
 
     learning_rate : string, optional
         The learning rate:
@@ -994,7 +1048,7 @@ class SGDRegressor(BaseSGDRegressor, SelectorMixin):
     >>> clf.fit(X, y)
     SGDRegressor(alpha=0.0001, epsilon=0.1, eta0=0.01, fit_intercept=True,
            l1_ratio=0.15, learning_rate='invscaling', loss='squared_loss',
-           n_iter=5, penalty='l2', power_t=0.25, random_state=None, rho=None,
+           n_iter=5, penalty='l2', power_t=0.25, random_state=None,
            shuffle=False, verbose=0, warm_start=False)
 
     See also
@@ -1002,4 +1056,18 @@ class SGDRegressor(BaseSGDRegressor, SelectorMixin):
     Ridge, ElasticNet, Lasso, SVR
 
     """
-    pass
+    def __init__(self, loss="squared_loss", penalty="l2", alpha=0.0001,
+                 l1_ratio=0.15, fit_intercept=True, n_iter=5, shuffle=False,
+                 verbose=0, epsilon=DEFAULT_EPSILON, random_state=None,
+                 learning_rate="invscaling", eta0=0.01, power_t=0.25,
+                 warm_start=False):
+        super(SGDRegressor, self).__init__(loss=loss, penalty=penalty,
+                                           alpha=alpha, l1_ratio=l1_ratio,
+                                           fit_intercept=fit_intercept,
+                                           n_iter=n_iter, shuffle=shuffle,
+                                           verbose=verbose,
+                                           epsilon=epsilon,
+                                           random_state=random_state,
+                                           learning_rate=learning_rate,
+                                           eta0=eta0, power_t=power_t,
+                                           warm_start=warm_start)

@@ -20,7 +20,7 @@ of learning with very large datasets.
 Standard kernelized SVMs do not scale well to large datasets, but using an
 approximate kernel map it is possible to use much more efficient linear SVMs.
 In particularly the combination of kernel map approximations with
-:class:`SGDClassifier` can make nonlinear learning on large datasets possible.
+:class:`SGDClassifier` can make non-linear learning on large datasets possible.
 
 Since there has not been much empirical work using approximate embeddings, it
 is advisable to compare results against exact kernel methods when possible.
@@ -59,8 +59,7 @@ prior to applying a linear algorithm, for example a linear SVM::
     SGDClassifier(alpha=0.0001, class_weight=None, epsilon=0.1, eta0=0.0,
            fit_intercept=True, l1_ratio=0.15, learning_rate='optimal',
            loss='hinge', n_iter=5, n_jobs=1, penalty='l2', power_t=0.5,
-           random_state=None, rho=None, shuffle=False, verbose=0,
-           warm_start=False)
+           random_state=None, shuffle=False, verbose=0, warm_start=False)
     >>> clf.score(X_features, y)
     1.0
 
@@ -79,7 +78,7 @@ function does not actually depend on the data given to the ``fit`` function.
 Only the dimensionality of the data is used.
 Details on the method can be found in [RR2007]_.
 
-For a given value of ``n_components`` :class:`RBFSampler` is often less acurate
+For a given value of ``n_components`` :class:`RBFSampler` is often less accurate
 as :class:`Nystroem`. :class:`RBFSampler` is cheaper to compute, though, making
 use of larger feature spaces more efficient.
 
@@ -118,7 +117,7 @@ The class :class:`AdditiveChi2Sampler` implements this component wise
 deterministic sampling. Each component is sampled `n` times, yielding
 `2n+1` dimensions per input dimension (the multiple of two stems
 from the real and complex part of the Fourier transform).
-In the literature, `n` is usually choosen to be `1` or `2`, transforming
+In the literature, `n` is usually chosen to be `1` or `2`, transforming
 the dataset to size `n_samples x 5 * n_features` (in the case of `n=2`).
 
 The approximate feature map provided by :class:`AdditiveChi2Sampler` can be combined
@@ -158,9 +157,9 @@ into a Hilbert space :math:`\mathcal{H}`, such that
 
 .. math::
 
-        k(x,y) = < \phi(x), \phi(y)>
+        k(x,y) = \langle \phi(x), \phi(y) \rangle
 
-Where :math:`< \cdot, \cdot >` denotes the inner product in the
+Where :math:`\langle \cdot, \cdot \rangle` denotes the inner product in the
 Hilbert space.
 
 If an algorithm, such as a linear support vector machine or PCA,

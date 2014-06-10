@@ -1,11 +1,11 @@
 # Author: Mathieu Blondel
-# License: BSD Style.
+# License: BSD 3 clause
 
 from .stochastic_gradient import BaseSGDClassifier
-from ..feature_selection.selector_mixin import SelectorMixin
+from ..feature_selection.from_model import _LearntSelectorMixin
 
 
-class Perceptron(BaseSGDClassifier, SelectorMixin):
+class Perceptron(BaseSGDClassifier, _LearntSelectorMixin):
     """Perceptron
 
     Parameters
@@ -86,8 +86,7 @@ class Perceptron(BaseSGDClassifier, SelectorMixin):
     """
     def __init__(self, penalty=None, alpha=0.0001, fit_intercept=True,
                  n_iter=5, shuffle=False, verbose=0, eta0=1.0, n_jobs=1,
-                 random_state=0, class_weight=None, warm_start=False,
-                 seed=None):
+                 random_state=0, class_weight=None, warm_start=False):
         super(Perceptron, self).__init__(loss="perceptron",
                                          penalty=penalty,
                                          alpha=alpha, l1_ratio=0,
@@ -101,4 +100,4 @@ class Perceptron(BaseSGDClassifier, SelectorMixin):
                                          power_t=0.5,
                                          warm_start=warm_start,
                                          class_weight=class_weight,
-                                         n_jobs=n_jobs, seed=seed)
+                                         n_jobs=n_jobs)
